@@ -1,3 +1,5 @@
 FROM scratch
-COPY ./main /main
-ENTRYPOINT ["/main"]
+COPY ./envleaker /app/
+EXPOSE 8080
+USER 1000
+ENTRYPOINT ["/app/envleaker"]
