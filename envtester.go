@@ -2,9 +2,9 @@ package main
 
 import (
 	"database/sql"
-	"fmt"
 	_ "github.com/lib/pq"
 	"io/ioutil"
+	"log"
 	"net/http"
 	"os"
 	"strings"
@@ -27,30 +27,46 @@ func getIp(w http.ResponseWriter, r *http.Request) {
 }
 
 func getEnv(w http.ResponseWriter, r *http.Request) {
-	fmt.Print(r.RemoteAddr + " requesting " + variable + "\n")
+	log.Println(r.RemoteAddr + " requesting /env")
 	for _, e := range os.Environ() {
 		w.Write([]byte(e + "\n"))
 	}
 }
 
 func connectPg(w http.ResponseWriter, r *http.Request) {
-	fmt.Print(r.RemoteAddr + " requesting " + variable + "\n")
-    connStr, _ := os.LookupEnv("connStr")
-    db, err := sql.Open("postgres", connStr)
-    defer db.Close()
+	log.Println(r.RemoteAddr + " requesting /pg")
+	connStr, ok := os.LookupEnv("connStr")
+	if !ok {
+		w.Write([]byte("'connStr' environment variable missing"))
+		return
+	}
+	if f, ok := w.(http.Flusher); ok {
+		f.Flush()
+	} else {
+		log.Println("Damn, no flush")
+	}
+	db, err := sql.Open("postgres", connStr)
+    log.Println("Connected to db")
+	defer db.Close()
+	if err != nil {
+		log.Fatal("error connecting to db")
+		log.Fatal(err)
+	}
+	w.Write([]byte("success"))
+	var result string
+	err = db.QueryRow("SELECT 1;").Scan(&result)
     if err != nil {
-         w.Write([]byte(err.Error()))
+        log.Fatal(err)
     }
-    w.Write([]byte("success"))
-    row := db.QueryRow("SELECT 1")
-    var result string
-    row.Scan(&result)
-    w.Write([]byte(result))
+	if result != "1" {
+		log.Println("select (failed? )result is not 1???")
+	}
+	w.Write([]byte(result))
 }
 
 func returnEnv(w http.ResponseWriter, r *http.Request) {
 	variable := strings.Trim(r.URL.Path, "/")
-	fmt.Print(r.RemoteAddr + " requesting " + variable + "\n")
+	log.Println(r.RemoteAddr + " requesting " + variable)
 	result, ok := os.LookupEnv(variable)
 	if ok {
 		w.Write([]byte(result))
@@ -60,7 +76,7 @@ func returnEnv(w http.ResponseWriter, r *http.Request) {
 }
 
 func main() {
-	fmt.Print("env tester starting\n")
+	log.Println("env tester starting")
 	http.HandleFunc("/", returnEnv)
 	http.HandleFunc("/ip", getIp)
 	http.HandleFunc("/env", getEnv)
